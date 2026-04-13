@@ -21,10 +21,6 @@ if not GEMINI_API_KEY:
     st.info("Get your free key from: https://aistudio.google.com/")
     st.stop()
 
-# Configure for Gemini
-os.environ["OPENAI_API_KEY"] = "dummy"  # CrewAI requires this but won't use it
-os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
@@ -36,9 +32,10 @@ except ImportError:
     st.stop()
 
 try:
-    from crewai import Agent, Crew, Process, Task
+    import google.generativeai as genai
+    genai.configure(api_key=GEMINI_API_KEY)
 except ImportError:
-    st.error("Missing crewai")
+    st.error("Missing google-generativeai")
     st.stop()
 
 # =============================================================================
@@ -69,57 +66,33 @@ def extract_text_from_file(uploaded_file) -> str:
     
     raise ValueError("Please upload PDF or TXT files")
 
-def run_crew(pdf_text: str, company_description: str) -> str:
-    # Use Google Gemini
-    from langchain_google_genai import ChatGoogleGenerativeAI
+def generate_proposal(pdf_text: str, company_description: str) -> str:
+    """Generate proposal using Google Gemini directly (no CrewAI complexity)"""
     
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=GEMINI_API_KEY,
-        temperature=0.7,
-    )
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    rfp_analyst = Agent(
-        role="Senior Grant RFP Analyst",
-        goal="Extract Problem Statement and Requirements from the RFP.",
-        backstory="You are a meticulous grant analyst with 15 years of experience.",
-        verbose=False,
-        allow_delegation=False,
-        llm=llm,
-    )
+    prompt = f"""
+    You are an expert grant proposal writer. Based on the following RFP and company description, write a professional Executive Summary of approximately 300 words.
 
-    proposal_writer = Agent(
-        role="Expert Grant Proposal Writer",
-        goal="Write a compelling 300-word Executive Summary for a grant proposal.",
-        backstory="You have secured over $50 million in grants.",
-        verbose=False,
-        allow_delegation=False,
-        llm=llm,
-    )
+    === RFP TEXT ===
+    {pdf_text[:8000]}  # Limit to avoid token limits
 
-    extract_task = Task(
-        description=f"RFP TEXT:\n{pdf_text}\n\nExtract: 1. Problem Statement 2. Key Requirements (bullet points)",
-        expected_output="Problem Statement and Key Requirements",
-        agent=rfp_analyst,
-    )
+    === COMPANY DESCRIPTION ===
+    {company_description}
 
-    write_task = Task(
-        description=f"Company: {company_description}\n\nWrite a professional 300-word Executive Summary. Include: hook, problem, solution, expected impact, call to action.",
-        expected_output="Executive Summary of approximately 300 words",
-        agent=proposal_writer,
-        context=[extract_task],
-    )
+    === INSTRUCTIONS ===
+    Write a compelling Executive Summary that:
+    1. Opens with a strong hook referencing the problem
+    2. Introduces the organization and its expertise
+    3. Explains how the organization's solution addresses the RFP requirements
+    4. Includes specific, measurable expected impact
+    5. Ends with a confident call to action
 
-    crew = Crew(
-        agents=[rfp_analyst, proposal_writer],
-        tasks=[extract_task, write_task],
-        process=Process.sequential,
-        verbose=False,
-    )
-
-    result = crew.kickoff()
-    return str(result)
-
+    Use professional, persuasive language. Make every sentence count.
+    """
+    
+    response = model.generate_content(prompt)
+    return response.text
 
 # =============================================================================
 # STREAMLIT UI
@@ -133,9 +106,11 @@ st.markdown("*Free with Google Gemini AI - Generate executive summaries in secon
 if GEMINI_API_KEY:
     st.success("✅ API Ready - Generate proposals for FREE!")
 
+st.info("💡 Get your free Gemini API key at [Google AI Studio](https://aistudio.google.com/)")
+
 uploaded_file = st.file_uploader("Upload Grant RFP (PDF or TXT)", type=["pdf", "txt"])
 company_desc = st.text_area("Describe Your Organization", height=150, 
-    placeholder="Organization name, mission, key achievements, budget, team size...")
+    placeholder="Organization name, mission, key achievements, budget, team size, past grants...")
 
 if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or not company_desc)):
     with st.spinner("📖 Reading file..."):
@@ -145,7 +120,7 @@ if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or n
     
     with st.spinner("🎯 Generating executive summary (10-20 seconds)..."):
         try:
-            result = run_crew(text, company_desc)
+            result = generate_proposal(text, company_desc)
         except Exception as e:
             st.error(f"Error: {e}")
             st.stop()
@@ -153,7 +128,16 @@ if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or n
     st.markdown("---")
     st.subheader("📝 Executive Summary")
     st.write(result)
+    
+    # Download button
+    st.download_button(
+        label="📥 Download as Text",
+        data=result,
+        file_name="grant_executive_summary.txt",
+        mime="text/plain"
+    )
+    
     st.success("Done!")
 
 st.markdown("---")
-st.caption("Powered by Google Gemini · CrewAI · Streamlit")
+st.caption("Powered by Google Gemini AI · Streamlit")
