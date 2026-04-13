@@ -1,0 +1,8 @@
+streamlit
+crewai
+crewai-tools
+PyPDF2
+python-dotenv
+groq
+litellm
+pandas
