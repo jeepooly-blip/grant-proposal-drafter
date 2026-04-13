@@ -6,25 +6,24 @@ load_dotenv()
 import streamlit as st
 
 # =============================================================================
-# API KEY CONFIGURATION
+# API KEY CONFIGURATION - Google Gemini
 # =============================================================================
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-if not GROQ_API_KEY:
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+if not GEMINI_API_KEY:
     try:
-        GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+        GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
     except:
         pass
 
-if not GROQ_API_KEY:
+if not GEMINI_API_KEY:
     st.error("API key not configured!")
-    st.info("Add GROQ_API_KEY to Streamlit Secrets or .env file")
+    st.info("Get your free key from: https://aistudio.google.com/")
     st.stop()
 
-# Configure Groq as OpenAI-compatible for CrewAI
-os.environ["OPENAI_API_KEY"] = GROQ_API_KEY
-os.environ["OPENAI_BASE_URL"] = "https://api.groq.com/openai/v1"
-os.environ["OPENAI_MODEL_NAME"] = "llama-3.3-70b-versatile"
+# Configure for Gemini
+os.environ["OPENAI_API_KEY"] = "dummy"  # CrewAI requires this but won't use it
+os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 
 # =============================================================================
 # IMPORTS
@@ -71,12 +70,22 @@ def extract_text_from_file(uploaded_file) -> str:
     raise ValueError("Please upload PDF or TXT files")
 
 def run_crew(pdf_text: str, company_description: str) -> str:
+    # Use Google Gemini
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=GEMINI_API_KEY,
+        temperature=0.7,
+    )
+    
     rfp_analyst = Agent(
         role="Senior Grant RFP Analyst",
         goal="Extract Problem Statement and Requirements from the RFP.",
         backstory="You are a meticulous grant analyst with 15 years of experience.",
         verbose=False,
         allow_delegation=False,
+        llm=llm,
     )
 
     proposal_writer = Agent(
@@ -85,6 +94,7 @@ def run_crew(pdf_text: str, company_description: str) -> str:
         backstory="You have secured over $50 million in grants.",
         verbose=False,
         allow_delegation=False,
+        llm=llm,
     )
 
     extract_task = Task(
@@ -118,9 +128,9 @@ def run_crew(pdf_text: str, company_description: str) -> str:
 st.set_page_config(page_title="Grant Proposal Drafter", page_icon="🎯", layout="centered")
 
 st.title("🎯 Grant Proposal Drafter")
-st.markdown("*Free with Groq AI - Generate executive summaries in seconds*")
+st.markdown("*Free with Google Gemini AI - Generate executive summaries in seconds*")
 
-if GROQ_API_KEY:
+if GEMINI_API_KEY:
     st.success("✅ API Ready - Generate proposals for FREE!")
 
 uploaded_file = st.file_uploader("Upload Grant RFP (PDF or TXT)", type=["pdf", "txt"])
@@ -134,7 +144,11 @@ if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or n
     st.info(f"✅ Extracted {len(text):,} characters. AI is working...")
     
     with st.spinner("🎯 Generating executive summary (10-20 seconds)..."):
-        result = run_crew(text, company_desc)
+        try:
+            result = run_crew(text, company_desc)
+        except Exception as e:
+            st.error(f"Error: {e}")
+            st.stop()
     
     st.markdown("---")
     st.subheader("📝 Executive Summary")
@@ -142,4 +156,4 @@ if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or n
     st.success("Done!")
 
 st.markdown("---")
-st.caption("Powered by Groq (Free) · CrewAI · Streamlit · Llama 3.3 70B")
+st.caption("Powered by Google Gemini · CrewAI · Streamlit")
