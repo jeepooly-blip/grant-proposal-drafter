@@ -18,10 +18,10 @@ if not GROQ_API_KEY:
 
 if not GROQ_API_KEY:
     st.error("API key not configured!")
-    st.info("Add GROQ_API_KEY to secrets or .env file")
+    st.info("Add GROQ_API_KEY to Streamlit Secrets or .env file")
     st.stop()
 
-# Configure for Groq (OpenAI compatible)
+# Configure Groq as OpenAI-compatible for CrewAI
 os.environ["OPENAI_API_KEY"] = GROQ_API_KEY
 os.environ["OPENAI_BASE_URL"] = "https://api.groq.com/openai/v1"
 os.environ["OPENAI_MODEL_NAME"] = "llama-3.3-70b-versatile"
@@ -75,7 +75,7 @@ def run_crew(pdf_text: str, company_description: str) -> str:
         role="Senior Grant RFP Analyst",
         goal="Extract Problem Statement and Requirements from the RFP.",
         backstory="You are a meticulous grant analyst with 15 years of experience.",
-        verbose=True,
+        verbose=False,
         allow_delegation=False,
     )
 
@@ -83,19 +83,19 @@ def run_crew(pdf_text: str, company_description: str) -> str:
         role="Expert Grant Proposal Writer",
         goal="Write a compelling 300-word Executive Summary for a grant proposal.",
         backstory="You have secured over $50 million in grants.",
-        verbose=True,
+        verbose=False,
         allow_delegation=False,
     )
 
     extract_task = Task(
-        description=f"RFP TEXT:\n{pdf_text}\n\nExtract: 1. Problem Statement 2. Key Requirements",
-        expected_output="Problem Statement and Requirements",
+        description=f"RFP TEXT:\n{pdf_text}\n\nExtract: 1. Problem Statement 2. Key Requirements (bullet points)",
+        expected_output="Problem Statement and Key Requirements",
         agent=rfp_analyst,
     )
 
     write_task = Task(
-        description=f"Company: {company_description}\n\nWrite 300-word Executive Summary. Include: hook, problem, solution, impact.",
-        expected_output="Executive Summary",
+        description=f"Company: {company_description}\n\nWrite a professional 300-word Executive Summary. Include: hook, problem, solution, expected impact, call to action.",
+        expected_output="Executive Summary of approximately 300 words",
         agent=proposal_writer,
         context=[extract_task],
     )
@@ -104,14 +104,15 @@ def run_crew(pdf_text: str, company_description: str) -> str:
         agents=[rfp_analyst, proposal_writer],
         tasks=[extract_task, write_task],
         process=Process.sequential,
-        verbose=True,
+        verbose=False,
     )
 
-    return str(crew.kickoff())
+    result = crew.kickoff()
+    return str(result)
 
 
 # =============================================================================
-# UI
+# STREAMLIT UI
 # =============================================================================
 
 st.set_page_config(page_title="Grant Proposal Drafter", page_icon="🎯", layout="centered")
@@ -123,13 +124,19 @@ if GROQ_API_KEY:
     st.success("✅ API Ready - Generate proposals for FREE!")
 
 uploaded_file = st.file_uploader("Upload Grant RFP (PDF or TXT)", type=["pdf", "txt"])
-company_desc = st.text_area("Describe Your Organization", height=150)
+company_desc = st.text_area("Describe Your Organization", height=150, 
+    placeholder="Organization name, mission, key achievements, budget, team size...")
 
 if st.button("🚀 Generate Executive Summary", disabled=(not uploaded_file or not company_desc)):
-    with st.spinner("Processing..."):
+    with st.spinner("📖 Reading file..."):
         text = extract_text_from_file(uploaded_file)
+    
+    st.info(f"✅ Extracted {len(text):,} characters. AI is working...")
+    
+    with st.spinner("🎯 Generating executive summary (10-20 seconds)..."):
         result = run_crew(text, company_desc)
     
+    st.markdown("---")
     st.subheader("📝 Executive Summary")
     st.write(result)
     st.success("Done!")
